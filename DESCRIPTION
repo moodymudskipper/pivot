@@ -20,3 +20,5 @@ Imports:
     tidyr,
     dplyr,
     glue
+URL: https://github.com/moodymudskipper/pivot
+BugReports: https://github.com/moodymudskipper/pivot/issues
