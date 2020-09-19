@@ -1,0 +1,243 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# pivot
+
+*{pivot}* is an a package to pivot inside `dplyr::summarize()` calls. 
+It's experimental, not thoroughly tested, etc...
+
+Pivoting operations are grouped operations, although they are
+traditionally treated differently, this package explores this idea .
+
+The goal is to provide 2 functions, `widen()` and `lengthen()`, which do most of
+what `pivot_wider()` and `pivot_longer()` do. Their key characteristics are : 
+
+* They're used in a `dplyr::summarize()` call, which allows one to combine them with other aggregations
+* The new names are on the left side of `=` or `:=`, the right side describes the values,
+  which is what we're used to
+* Very few arguments are needed (often just one), so it's very compact
+
+The examples below take every example from `?tidyr::pivot_longer` and `?tidyr::pivot_wider`
+and translates it into *{pivot}* syntax, right below the comented original code.
+
+It has only been tested on these examples, please report if you find issues.
+
+## Installation
+
+You can install the released version of pivot from [CRAN](https://CRAN.R-project.org) with:
+
+``` r
+remotes::install_github("pivot")
+```
+
+## widen
+
+`widen()` calls have the form `widen(..., .fill = NULL)`.
+
+glue strings describe the names of the columns to create, values are an expression
+of the column to take values from. 
+
+
+```{r, eval = FALSE}
+widen(
+  "{col_to_take_new_names_from_1}" = col_to_take_values_from_1,
+  "foo_{toupper(col_to_take_new_names_from_2)}" = col_to_take_values_from_2,
+  .fill =  0
+)
+
+widen(
+  "{col_to_take_new_names_from}" = mean(col_to_take_values_from)
+)
+```
+
+## lengthen
+
+`lengthen()` calls have the form `lengthen(expr, drop_na = FALSE)`.
+
+On the left side, names of new columns are given, ending by the column containing the
+values. 
+
+On the right side a regular expression describes what columns should be
+considered, and how to parse their names into the key columns.
+
+`_val_` is a special value to handle multiple value columns.
+
+```{r, eval = FALSE}
+lengthen(
+  c("key", "value") = "^myprefix"
+)
+
+# use groups for several key columns
+lengthen(
+  c("key1", "key2", "value") = "^(.*)_(.*)$"
+)
+
+# use named capture for a different order
+lengthen(
+  c("key1", "key2", "value") = "^(?<key2>.*)_(.*)$"
+)
+
+# use '_val_' to get several value columns
+lengthen(
+  c("key", "_val_") = "^(?<_val_>.*)_(.*)$"
+)
+```
+
+
+## Examples from `?pivot_wider`
+
+original code is commented right before our translation
+
+```{r}
+suppressPackageStartupMessages(library(tidyverse, warn.conflicts = FALSE))
+library(pivot)
+
+fish_encounters
+
+# fish_encounters %>%
+#   pivot_wider(names_from = station, values_from = seen)
+fish_encounters %>%
+  group_by(fish) %>%
+  summarize(
+    widen("{station}"= seen), 
+    .groups = "drop")
+
+# Fill in missing values
+# fish_encounters %>%
+#   pivot_wider(names_from = station, values_from = seen, values_fill = 0)
+fish_encounters %>%
+  group_by(fish) %>%
+  summarize(
+    widen("{station}" = seen, .fill = 0), 
+    .groups = "drop")
+
+# Generate column names from multiple variables
+us_rent_income
+
+# us_rent_income %>%
+#   pivot_wider(names_from = variable, values_from = c(estimate, moe))
+us_rent_income %>%
+  group_by(GEOID, NAME) %>%
+  summarize(widen("estimate_{variable}" = estimate,
+                  "moe_{variable}" = moe), 
+            .groups ="drop")
+
+
+# When there are multiple `names_from` or `values_from`, you can use
+# use `names_sep` or `names_glue` to control the output variable names
+# us_rent_income %>%
+#   pivot_wider(
+#     names_from = variable,
+#     names_sep = ".",
+#     values_from = c(estimate, moe)
+#   )
+us_rent_income %>%
+  group_by(GEOID, NAME) %>%
+  summarize(widen("estimate.{variable}" = estimate,
+                  "moe.{variable}" = moe), 
+            .groups ="drop")
+
+# us_rent_income %>%
+#   pivot_wider(
+#     names_from = variable,
+#     names_glue = "{variable}_{.value}",
+#     values_from = c(estimate, moe)
+#   )
+us_rent_income %>%
+  group_by(GEOID, NAME) %>%
+  summarize(widen("{variable}_estimate" = estimate,
+                  "{variable}_moe" = moe), 
+            .groups ="drop")
+
+# Can perform aggregation with values_fn
+warpbreaks <- as_tibble(warpbreaks[c("wool", "tension", "breaks")])
+warpbreaks
+
+# warpbreaks %>%
+#   pivot_wider(
+#     names_from = wool,
+#     values_from = breaks,
+#     values_fn = mean
+#   )
+warpbreaks %>%
+  group_by(tension) %>%
+  summarize(
+    widen("{wool}" = mean(breaks)),
+    .groups = "drop"
+  )
+```
+
+
+## Examples from `?pivot_longer`
+
+```{r}
+# Simplest case where column names are character data
+relig_income
+
+# relig_income %>%
+#   pivot_longer(-religion, names_to = "income", values_to = "count")
+relig_income %>%
+  group_by(religion) %>%
+  summarize(
+    lengthen(c("income", "count") := ".*"),
+    .groups = "drop")
+
+# Slightly more complex case where columns have common prefix,
+# and missing missings are structural so should be dropped.
+billboard
+
+# billboard %>%
+#  pivot_longer(
+#    cols = starts_with("wk"),
+#    names_to = "week",
+#    names_prefix = "wk",
+#    values_to = "rank",
+#    values_drop_na = TRUE
+#  )
+billboard %>%
+  group_by(artist, track, date.entered) %>%
+  summarize(
+    lengthen(c("week", "rank") := "^wk(.*?)$", drop_na = TRUE),
+    .groups = "drop")
+
+# Multiple variables stored in column names
+# who %>% pivot_longer(
+#   cols = new_sp_m014:newrel_f65,
+#   names_to = c("diagnosis", "gender", "age"),
+#   names_pattern = "new_?(.*)_(.)(.*)",
+#   values_to = "count"
+# )
+
+who %>%
+  group_by(country, iso2, iso3, year) %>%
+  summarize(lengthen(
+    c("diagnosis", "gender", "age", "count") := "^new_?(.*)_(.)(.*)"
+  )) 
+
+# Multiple observations per row
+anscombe
+# anscombe %>%
+#  pivot_longer(everything(),
+#    names_to = c(".value", "set"),
+#    names_pattern = "(.)(.)"
+#  )
+
+anscombe %>%
+  as_tibble() %>%
+  summarize(lengthen(
+    c("set", "_val_") := "(?<_val_>.)(.)"
+  ))
+```
+
