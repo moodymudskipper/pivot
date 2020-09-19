@@ -1,12 +1,12 @@
 Package: pivot
-Title: What the Package Does (One Line, Title Case)
+Title: Pivot Inside 'summarize' Calls 
 Version: 0.0.0.9000
 Authors@R: 
     person(given = "Antoine",
            family = "Fabri",
            role = c("aut", "cre"),
            email = "antoine.fabri@gmail.com")
-Description: What the package does (one paragraph).
+Description: Pivot inside 'summarize' calls.
 License: GPL-3
 Encoding: UTF-8
 Language: en
